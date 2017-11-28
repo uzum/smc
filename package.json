@@ -1,0 +1,14 @@
+{
+  "name": "smc",
+  "version": "1.0.0",
+  "description": "symbolic model checking using binary decision diagrams",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "anil.uzumcuoglu",
+  "license": "ISC",
+  "dependencies": {
+    "print-tree": "^0.1.4"
+  }
+}
