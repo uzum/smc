@@ -9,6 +9,7 @@
   "author": "anil.uzumcuoglu",
   "license": "ISC",
   "dependencies": {
+    "mocha": "^4.0.1",
     "print-tree": "^0.1.4"
   }
 }
