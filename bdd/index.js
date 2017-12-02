@@ -147,6 +147,27 @@ BDD.prototype.rebuild = function(node){
   return node;
 };
 
+// for each node with the given variable index
+// redirect incoming edges to the
+// - low(node) if value is 0
+// - high(node) if value is 1
+// reduce the resulting bdd
+BDD.prototype.restrict = function(value, index){
+  this.root = this._restrict(value, index, this.root);
+  return this.reduce();
+};
+
+BDD.prototype._restrict = function(value, index, node){
+  if (node.terminal) return node;
+  if (node.index === index) {
+    if (value) return this._restrict(value, index, node.high);
+    else return this._restrict(value, index, node.low);
+  }
+  node.high = this._restrict(value, index, node.high);
+  node.low = this._restrict(value, index, node.low);
+  return node;
+};
+
 BDD.prototype.reduce = function(){
   this._reduce(this.root);
   return this.reorganize();
