@@ -178,6 +178,10 @@ BDD.prototype.reduce = function(){
   return this.reorganize();
 };
 
+BDD.prototype.clone = function(){
+  return new BDD({ truthTable: this.truthTable });
+};
+
 BDD.prototype._reduce = function(node){
   // all 0 terminal nodes are labeled with 0
   // all 1 terminal nodes are labeled with 1
@@ -219,6 +223,22 @@ BDD.prototype._reduce = function(node){
 
   // else id = next unused integer
   node.label = ++this.reduction.latestLabel;
+};
+
+BDD.prototype.exists = function(index){
+  return BDD.apply(
+    this.clone().restrict(0, index),
+    this.clone().restrict(1, index),
+    (l, r) => l | r
+  );
+};
+
+BDD.prototype.forall = function(index){
+  return BDD.apply(
+    this.clone().restrict(0, index),
+    this.clone().restrict(1, index),
+    (l, r) => l & r
+  );
 };
 
 module.exports = BDD;
