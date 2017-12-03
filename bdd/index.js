@@ -44,8 +44,13 @@ BDD._apply = function(left, right, operation){
   // higher variable index. Then create a new node with this variable index
   // low of this new node will be apply(op, low(higher), lower)
   // high of this new node will be apply(op, high(higher), lower)
-  const higher = left.index > right.index ? left : right;
-  const lower = left === higher ? right : left;
+  let higher, lower;
+  if (left.terminal || right.terminal) {
+    higher = left.terminal ? right : left;
+  } else {
+    higher = left.index < right.index ? left : right;
+  }
+  lower = left === higher ? right : left;
 
   return {
     index: higher.index,
