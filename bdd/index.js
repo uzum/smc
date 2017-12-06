@@ -1,9 +1,16 @@
 const printTree = require('print-tree');
+const utils = require('../utils');
+
+global.LOG = function(text){
+  // console.log(text);
+};
 
 function BDD(opts){
   if (opts.truthTable) {
     this.truthTable = opts.truthTable;
-    this.varCount = opts.truthTable[0].length - 1;
+    this.variables = opts.variables
+      || opts.truthTable[0].map((r, i) => `X${i + 1}`).slice(0, -1);
+    this.varCount = this.variables.length;
     this.root = this.createTree();
   } else if (opts.root) {
     this.root = opts.root;
@@ -15,7 +22,9 @@ function BDD(opts){
 }
 
 BDD.apply = function(left, right, operation){
-  return new BDD({ root: BDD._apply(left.root, right.root, operation )}).reduce();
+  return new BDD({
+    root: BDD._apply(left.root, right.root, operation)
+  }).reduce();
 };
 
 BDD._apply = function(left, right, operation){
@@ -24,7 +33,7 @@ BDD._apply = function(left, right, operation){
   if (left.terminal && right.terminal) {
     return {
       terminal: true,
-      index: operation(left.index, right.index)
+      value: operation(left.value, right.value)
     };
   }
 
@@ -32,9 +41,9 @@ BDD._apply = function(left, right, operation){
   // then create a new node with the same variable index
   // low of this new node will be apply(op, low(left), low(right))
   // high of this new node will be apply(op, high(left), high(right)) 
-  if (!left.terminal && !right.terminal && left.index === right.index) {
+  if (!left.terminal && !right.terminal && left.variable === right.variable) {
     return {
-      index: left.index,
+      variable: left.variable,
       low: BDD._apply(left.low, right.low, operation),
       high: BDD._apply(left.high, right.high, operation)
     };
@@ -48,12 +57,12 @@ BDD._apply = function(left, right, operation){
   if (left.terminal || right.terminal) {
     higher = left.terminal ? right : left;
   } else {
-    higher = left.index < right.index ? left : right;
+    higher = left.variable < right.variable ? left : right;
   }
   lower = left === higher ? right : left;
 
   return {
-    index: higher.index,
+    variable: higher.variable,
     low: BDD._apply(higher.low, lower, operation),
     high: BDD._apply(higher.high, lower, operation)
   };
@@ -62,30 +71,31 @@ BDD._apply = function(left, right, operation){
 BDD.prototype.getPathValue = function(path){
   return {
     terminal: true,
-    index: this.truthTable.find(function(row){
+    value: this.truthTable.find(function(row){
       return row.slice(0, -1).every((value, index) => path[index] === value);
     })[this.varCount]
   };
 };
 
-BDD.prototype.createTree = function(path = [], index = 1){
+BDD.prototype.createTree = function(path = [], index = 0){
+  LOG(`creating tree with path ${path.join('')}`);
   if (this.varCount === 0) {
     return {
       terminal: true,
-      index: this.truthTable[0]
+      value: this.truthTable[0]
     }
   }
 
-  if (index === this.varCount) {
+  if (index === this.varCount - 1) {
     return {
-      index: index + 1,
+      variable: this.variables[index],
       high: this.getPathValue(path.concat(1)),
       low: this.getPathValue(path.concat(0))
     };
   }
 
   return {
-    index: index + 1,
+    variable: this.variables[index],
     high: this.createTree(path.concat(1), index + 1),
     low: this.createTree(path.concat(0), index + 1)
   };
@@ -111,8 +121,8 @@ BDD.prototype.find = function(fn, node){
 
 BDD.prototype.print = function(){
   printTree(this.root, function(node){
-    if (node.terminal) return `${node.index} (#${node.label})`;
-    return `X${node.index} (#${node.label})`;
+    if (node.terminal) return `${node.value} (#${node.label})`;
+    return `${node.variable} (#${node.label})`;
   }, function(node){
     if (node.terminal) return [];
     return [node.high, node.low];
@@ -130,7 +140,6 @@ BDD.prototype.topologicalSort = function(node){
 
 BDD.prototype.reorganize = function(){
   this.forEach((node) => {
-    if (!node.terminal && node.low.label === node.high.label) return;
     this.reduction.labelReference[node.label] = node;
   });
 
@@ -140,14 +149,13 @@ BDD.prototype.reorganize = function(){
 
 BDD.prototype.rebuild = function(node){
   if (!node.terminal) {
-    node.low = this.reduction.labelReference[node.low.label];
-    node.high = this.reduction.labelReference[node.high.label];
-
-    if (node.low.label === node.high.label) {
-      return this.rebuild(node.low);
-    }
     this.rebuild(node.low);
     this.rebuild(node.high);
+
+    if (node.low.label === node.high.label) return node.low;
+
+    node.low = this.reduction.labelReference[node.low.label];
+    node.high = this.reduction.labelReference[node.high.label];
   }
   return node;
 };
@@ -157,19 +165,19 @@ BDD.prototype.rebuild = function(node){
 // - low(node) if value is 0
 // - high(node) if value is 1
 // reduce the resulting bdd
-BDD.prototype.restrict = function(value, index){
-  this.root = this._restrict(value, index, this.root);
+BDD.prototype.restrict = function(value, variable){
+  this.root = this._restrict(value, variable, this.root);
   return this.reduce();
 };
 
-BDD.prototype._restrict = function(value, index, node){
+BDD.prototype._restrict = function(value, variable, node){
   if (node.terminal) return node;
-  if (node.index === index) {
-    if (value) return this._restrict(value, index, node.high);
-    else return this._restrict(value, index, node.low);
+  if (node.variable === variable) {
+    if (value) return this._restrict(value, variable, node.high);
+    else return this._restrict(value, variable, node.low);
   }
-  node.high = this._restrict(value, index, node.high);
-  node.low = this._restrict(value, index, node.low);
+  node.high = this._restrict(value, variable, node.high);
+  node.low = this._restrict(value, variable, node.low);
   return node;
 };
 
@@ -179,14 +187,16 @@ BDD.prototype.reduce = function(){
 };
 
 BDD.prototype.clone = function(){
-  return new BDD({ truthTable: this.truthTable });
+  return new BDD({
+    root: utils.deepClone(this.root)
+  });
 };
 
 BDD.prototype._reduce = function(node){
   // all 0 terminal nodes are labeled with 0
   // all 1 terminal nodes are labeled with 1
   if (node.terminal) {
-    node.label = node.index;
+    node.label = node.value;
     return;
   }
 
@@ -197,8 +207,12 @@ BDD.prototype._reduce = function(node){
   // then id(n) = id(lo(n))
   if (node.high.label === node.low.label) {
     node.label = node.low.label;
-    node.index = node.low.index;
-    if (node.low.terminal) node.terminal = true;
+    if (node.low.terminal) {
+      node.terminal = true;
+      node.value = node.low.value;
+    } else {
+      node.variable = node.low.variable;
+    }
     return;
   }
 
@@ -211,13 +225,12 @@ BDD.prototype._reduce = function(node){
   if (sibling = this.find(function(candidate){
     return !candidate.terminal &&
       candidate.label &&
-      candidate.index === node.index &&
+      candidate.variable === node.variable &&
       candidate.low.label === node.low.label &&
       candidate.high.label === candidate.high.label;
   })){
     node.label = sibling.label;
-    node.index = sibling.index;
-    if (sibling.terminal) node.terminal = true;
+    node.variable = sibling.variable;
     return;
   }
 
@@ -225,18 +238,18 @@ BDD.prototype._reduce = function(node){
   node.label = ++this.reduction.latestLabel;
 };
 
-BDD.prototype.exists = function(index){
+BDD.prototype.exists = function(variable){
   return BDD.apply(
-    this.clone().restrict(0, index),
-    this.clone().restrict(1, index),
+    this.clone().restrict(0, variable),
+    this.clone().restrict(1, variable),
     (l, r) => l | r
   );
 };
 
-BDD.prototype.forall = function(index){
+BDD.prototype.forall = function(variable){
   return BDD.apply(
-    this.clone().restrict(0, index),
-    this.clone().restrict(1, index),
+    this.clone().restrict(0, variable),
+    this.clone().restrict(1, variable),
     (l, r) => l & r
   );
 };

@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "mocha": "^4.0.1",
-    "print-tree": "^0.1.4"
+    "print-tree": "^0.1.4",
+    "ctl-model-checker": "https://github.com/uzum/ctl-model-checker"
   }
 }

@@ -1,0 +1,13 @@
+MODULE main
+VAR
+state : {x1, x2, NN} ;
+ASSIGN
+init(state) := x1;
+next(state) :=
+case
+(state=x1) : NN;
+(state=x2) : {x1, x2};
+(state=NN) : {x1, x2};
+1 : state;
+esac;
+CTLSPEC E [ x2 U x1 ]

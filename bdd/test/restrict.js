@@ -6,7 +6,7 @@ describe('bdd - restrict', function(){
     const bdd = new BDD({
       truthTable: [[0]]
     });
-    bdd.reduce().restrict(1, 2);
+    bdd.reduce().restrict(1, '');
     assert.strictEqual(bdd.topologicalSort().join(''), '0');
   });
 
@@ -17,7 +17,7 @@ describe('bdd - restrict', function(){
         [1, 1]
       ]
     });
-    bdd.reduce().restrict(1, 2);
+    bdd.reduce().restrict(1, 'X1');
     assert.strictEqual(bdd.topologicalSort().join(''), '1');
   });
 
@@ -28,7 +28,7 @@ describe('bdd - restrict', function(){
         [1, 1]
       ]
     });
-    bdd.reduce().restrict(0, 2);
+    bdd.reduce().restrict(0, 'X1');
     assert.strictEqual(bdd.topologicalSort().join(''), '0');
   });
 
@@ -45,7 +45,7 @@ describe('bdd - restrict', function(){
         [1, 1, 1, 1]
       ]
     });
-    bdd.reduce().restrict(0, 3);
+    bdd.reduce().restrict(0, 'X2');
     assert.strictEqual(bdd.topologicalSort().join(''), '410');
   });
 
@@ -62,7 +62,7 @@ describe('bdd - restrict', function(){
         [1, 1, 1, 1]
       ]
     });
-    bdd.reduce().restrict(1, 3);
+    bdd.reduce().restrict(1, 'X2');
     assert.strictEqual(bdd.topologicalSort().join(''), '41210');
   });
 
@@ -87,7 +87,7 @@ describe('bdd - restrict', function(){
         [1, 1, 1, 1, 1]
       ]
     });
-    bdd.reduce().restrict(0, 3);
+    bdd.reduce().restrict(0, 'X2');
     assert.strictEqual(bdd.topologicalSort().join(''), '531210210');
   });
 });
