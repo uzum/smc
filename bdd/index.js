@@ -78,7 +78,7 @@ BDD.prototype.getPathValue = function(path){
 };
 
 BDD.prototype.createTree = function(path = [], index = 0){
-  LOG(`creating tree with path ${path.join('')}`);
+  // LOG(`creating tree with path ${path.join('')}`);
   if (this.varCount === 0) {
     return {
       terminal: true,

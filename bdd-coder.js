@@ -1,37 +1,33 @@
-const BDD = require('./bdd');
+const BDD = require('./bddv2');
 const utils = require('./utils');
 
 const BDDCoder = function(){};
 
-BDDCoder.prototype.fromStates = function(states, opts){
-  if (!opts.satisfies) opts.satisfies = function(state, variable) {
-    return state.labels.includes(variable);
-  }
+BDDCoder.prototype.fromStates = function(model, opts = {}){
+  if (!opts.filter) opts.filter = () => true;
+  if (!opts.satisfies) opts.satisfies = (state, variable) => state.satisfies(variable);
+  if (!opts.variables) opts.variables = model.variables;
 
-  function valuate(state, valuation){
-    if (opts && opts.filter && !opts.filter(state)) return 0;
-    return valuation.reduce(function(result, value, index){
-      return result & !(value ^ opts.satisfies(state, opts.variables[index]))
-    }, 1);
-  }
-
-  const truthTable = [];
-  for (let i = 0; i < Math.pow(2, opts.variables.length); i++) {
-    const valuation = utils.leftpad(i.toString(2), opts.variables.length, 0).split('').map(Number);
-    const value = states.reduce(function(result, state){
-      return result | valuate(state, valuation);
-    }, 0);
-    truthTable.push(valuation.concat(value));
-  }
   return new BDD({
-    truthTable,
+    fn: (_) => {
+      return model.states.filter(opts.filter).some((state) => {
+        return opts.variables.every((variable) => {
+          return !(_[variable] ^ opts.satisfies(state, variable));
+        });
+      });
+    },
     variables: opts.variables
-  }).reduce();
+  });
 };
 
-BDDCoder.prototype.fromTransitionFn = function(states, opts){
+BDDCoder.prototype.fromTransition = function(model, opts = {}){
+  if (!opts.satisfes) opts.satisfies = (state, variable) => state.satisfies(variable);
+  if (!opts.variables) opts.variables = model.variables.reduce((list, variable) => {
+    return list.concat(variable, `${variable}'`);
+  }, []);
+
   function getState(valuation){
-    return states.find(function(state){
+    return model.states.find(function(state){
       return valuation.every(function(value, index){
         return !(value ^ opts.satisfies(state, opts.variables[2 * index]))
       });
@@ -46,20 +42,10 @@ BDDCoder.prototype.fromTransitionFn = function(states, opts){
     return Number(source.transitions.some(tx => tx.name === destination.name));
   }
 
-  const truthTable = [];
-  for (let i = 0; i < Math.pow(2, opts.variables.length); i++) {
-    const valuation = utils.leftpad(i.toString(2), opts.variables.length, 0).split('').map(Number);
-    truthTable.push(valuation.concat(hasTransition(valuation)));
-  }
-
   return new BDD({
-    truthTable,
+    fn: (_) => hasTransition(opts.variables.map(v => _[v])),
     variables: opts.variables
-  }).reduce();
-};
-
-BDDCoder.prototype.fromSatisfies = function(states, opts){
-  return this.fromStates(states, opts);
+  });
 };
 
 module.exports = new BDDCoder();

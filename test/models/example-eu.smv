@@ -1,6 +1,6 @@
 MODULE main
 VAR
-state : {p0, q0, NN} ;
+state : {p0, q0, NN, r0} ;
 ASSIGN
 init(state) := NN;
 next(state) :=

@@ -3,16 +3,12 @@
 const DEBUG = true;
 
 const parser = require('ctl-model-checker/parser');
+const BDD = require('./bddv2');
 const BDDCoder = require('./bdd-coder');
-const BDD = require('./bdd');
 const utils = require('./utils');
 
 const OR = (l, r) => l | r;
 const AND = (l, r) => l & r;
-
-global.LOG = function(text){
-  DEBUG && console.log(text);
-};
 
 const ModelChecker = function(model){
   this.model = model;
@@ -24,60 +20,65 @@ const ModelChecker = function(model){
   }, []);
 };
 
-ModelChecker.prototype.solveEU = function(){
-  const variables = this.model.variables;
+ModelChecker.prototype.invert = function(proposition){
+  if (proposition.startsWith('!')) return proposition.slice(1);
+  return `!${proposition}`;
+};
 
-  // Y = SAT(q)
-  let Y = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.q),
-    variables
-  });
-  LOG(`Y = SAT(${this.model.spec.q}) created`);
-  DEBUG && Y.print();
-
-  // Y' = SAT(q)
-  const YPrime = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.q),
-    satisfies: (state, variable) => state.satisfies(variable.slice(0, -1)),
-    variables: variables.map(v => `${v}'`)
-  });
-  LOG(`Y\' = SAT(${this.model.spec.q}) created`);
-  DEBUG && YPrime.print();
-
-  // W = SAT(p)
-  const W = BDDCoder.fromSatisfies(this.model.states, {
+ModelChecker.prototype.solveEX = function(){
+  const XPrime = BDDCoder.fromStates(this.model, {
     filter: (state) => state.satisfies(this.model.spec.p),
-    variables
+    satisfies: (state, variable) => state.satisfies(variable.slice(0, -1)),
+    variables: this.model.variables.map(v => `${v}'`)
   });
-  LOG(`W = SAT(${this.model.spec.p}) created`);
-  DEBUG && W.print();
+  const T = BDDCoder.fromTransition(this.model);
+  return this.extractStates(this.model.variables.reduce(
+    (bdd, variable) => bdd.exists(`${variable}'`),
+    BDD.apply(T, XPrime, AND)
+  ));
+};
 
-  // X = Set of states
-  let X = BDDCoder.fromStates(this.model.states, {
-    variables: variables
+ModelChecker.prototype.solveEG = function(){
+  let X = new BDD({ fn: () => false, variables: this.model.variables });
+  let Y = BDDCoder.fromStates(this.model, {
+    filter: (state) => state.satisfies(this.model.spec.p)
   });
-  LOG('X = Set of states created');
-  DEBUG && X.print();
+  const T = BDDCoder.fromTransition(this.model);
 
-  // T = transition function
-  const T = BDDCoder.fromTransitionFn(this.model.states, {
-    satisfies: function(state, variable){
-      return state.satisfies(variable) || state.satisfies(variable.slice(0, -1));
-    },
-    variables: variables.reduce(function(collection, variable){
-      return collection.concat(variable).concat(`${variable}'`)
-    }, [])
-  });
-  LOG('T = transition function created');
-  DEBUG && T.print();
-
-  while (X.topologicalSort().join('') !== Y.topologicalSort().join('')) {
+  while (!X.equals(Y)) {
     X = Y.clone();
+    let YPrime = Y.prime();
+    Y = BDD.apply(
+      Y,
+      this.model.variables.reduce(
+        (bdd, variable) => bdd.exists(`${variable}'`),
+        BDD.apply(T, YPrime, AND)
+      ),
+      AND
+    );
+  }
+  return this.extractStates(Y);
+};
+
+ModelChecker.prototype.solveEU = function(){
+  let X = BDDCoder.fromStates(this.model);
+  let Y = BDDCoder.fromStates(this.model, {
+    filter: (state) => state.satisfies(this.model.spec.q)
+  });
+
+  const W = BDDCoder.fromStates(this.model, {
+    filter: (state) => state.satisfies(this.model.spec.p)
+  });
+  const T = BDDCoder.fromTransition(this.model);
+
+  while (!X.equals(Y)) {
+    X = Y.clone();
+    let YPrime = Y.prime();
     Y = BDD.apply(
       Y,
       BDD.apply(
         W,
-        variables.reduce(
+        this.model.variables.reduce(
           (bdd, variable) => bdd.exists(`${variable}'`),
           BDD.apply(T, YPrime, AND)
         ),
@@ -86,183 +87,49 @@ ModelChecker.prototype.solveEU = function(){
       OR
     );
   }
-
-  LOG('Solution BDD is computed');
-  DEBUG && Y.print();
   return this.extractStates(Y);
-};
-
-ModelChecker.prototype.solveEX = function(){
-  const variables = this.model.variables;
-
-  // X' = SAT(p)
-  const XPrime = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.p),
-    satisfies: (state, variable) => state.satisfies(variable.slice(0, -1)),
-    variables: variables.map(v => `${v}'`)
-  });
-  LOG(`X\' = SAT(${this.model.spec.p}) created`);
-  DEBUG && XPrime.print();
-  XPrime.print();
-
-  // T = transition function
-  const T = BDDCoder.fromTransitionFn(this.model.states, {
-    satisfies: function(state, variable){
-      return state.satisfies(variable) || state.satisfies(variable.slice(0, -1));
-    },
-    variables: variables.reduce(function(collection, variable){
-      return collection.concat(variable).concat(`${variable}'`)
-    }, [])
-  });
-  LOG('T = transition function created');
-  DEBUG && T.print();
-
-  const solution = variables.reduce(
-    (bdd, variable) => bdd.exists(`${variable}'`),
-    BDD.apply(T, XPrime, AND)
-  );
-
-  LOG('Solution BDD is computed');
-  DEBUG && solution.print();
-  return this.extractStates(solution);
-};
-
-ModelChecker.prototype.solveEF = function(){
-  console.log('solving for EF');
-};
-
-ModelChecker.prototype.solveEG = function(){
-  const variables = this.model.variables;
-
-  // X = 0
-  let X = new BDD({ truthTable: [[0]] });
-  DEBUG && X.print();
-
-  // Y = SAT(p)
-  let Y = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.p),
-    variables
-  });
-  LOG(`Y = SAT(${this.model.spec.p}) created`);
-  DEBUG && Y.print();
-
-  // Y' = SAT(p)
-  const YPrime = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.p),
-    satisfies: (state, variable) => state.satisfies(variable.slice(0, -1)),
-    variables: variables.map(v => `${v}'`)
-  });
-  LOG(`Y\' = SAT(${this.model.spec.p}) created`);
-  DEBUG && YPrime.print();
-
-  // T = transition function
-  const T = BDDCoder.fromTransitionFn(this.model.states, {
-    satisfies: function(state, variable){
-      return state.satisfies(variable) || state.satisfies(variable.slice(0, -1));
-    },
-    variables: variables.reduce(function(collection, variable){
-      return collection.concat(variable).concat(`${variable}'`)
-    }, [])
-  });
-  LOG('T = transition function created');
-  DEBUG && T.print();
-
-  while (X.topologicalSort().join('') !== Y.topologicalSort().join('')) {
-    X = Y.clone();
-    Y = BDD.apply(
-      Y,
-      variables.reduce(
-        (bdd, variable) => bdd.exists(`${variable}'`),
-        BDD.apply(T, YPrime, AND)
-      ),
-      AND
-    );
-  }
-
-  LOG('Solution BDD is computed');
-  DEBUG && Y.print();
-  return this.extractStates(Y);
-};
-
-ModelChecker.prototype.solveAU = function(){
-  console.log('solving for AU');
-};
-
-ModelChecker.prototype.solveAX = function(){
-  console.log('solving for AX');
 };
 
 ModelChecker.prototype.solveAF = function(){
-  const variables = this.model.variables;
+  this.model.spec.p = this.invert(this.model.spec.p);
+  return this.excludeStates(this.solveEG());
+};
 
-  // X = Set of states
-  let X = BDDCoder.fromStates(this.model.states, {
-    variables: variables
-  });
-  LOG('X = Set of states created');
-  DEBUG && X.print();
-
-  // Y = SAT(p)
-  let Y = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.p),
-    variables
-  });
-  LOG(`Y = SAT(${this.model.spec.p}) created`);
-  DEBUG && Y.print();
-
-  // Y' = SAT(p)
-  const YPrime = BDDCoder.fromSatisfies(this.model.states, {
-    filter: (state) => state.satisfies(this.model.spec.p),
-    satisfies: (state, variable) => state.satisfies(variable.slice(0, -1)),
-    variables: variables.map(v => `${v}'`)
-  });
-  LOG(`Y\' = SAT(${this.model.spec.p}) created`);
-  DEBUG && YPrime.print();
-
-  // T = transition function
-  const T = BDDCoder.fromTransitionFn(this.model.states, {
-    satisfies: function(state, variable){
-      return state.satisfies(variable) || state.satisfies(variable.slice(0, -1));
-    },
-    variables: variables.reduce(function(collection, variable){
-      return collection.concat(variable).concat(`${variable}'`)
-    }, [])
-  });
-  LOG('T = transition function created');
-  DEBUG && T.print();
-
-  while (X.topologicalSort().join('') !== Y.topologicalSort().join('')) {
-    X = Y.clone();
-    Y = BDD.apply(
-      Y,
-      variables.reduce(
-        (bdd, variable) => bdd.forall(`${variable}'`),
-        BDD.apply(T, YPrime, AND)
-      ),
-      OR
-    );
-  }
-
-  LOG('Solution BDD is computed');
-  DEBUG && Y.print();
-  return this.extractStates(Y);
+ModelChecker.prototype.solveAX = function(){
+  this.model.spec.p = this.invert(this.model.spec.p);
+  return this.excludeStates(this.solveEG());
 };
 
 ModelChecker.prototype.solveAG = function(){
-  console.log('solving for AG');
+  this.model.spec.p = this.invert(this.model.spec.p);
+  return this.excludeStates(this.solveEF());
+};
+
+ModelChecker.prototype.solveEF = function(){
+  this.model.spec.q = this.model.spec.p;
+  this.model.spec.p = true;
+  return this.solveEU();
+};
+
+ModelChecker.prototype.excludeStates = function(states){
+  return this.model.states.filter(function(state){
+    return states.every(function(targetState){
+      return targetState.name !== state.name;
+    });
+  });
 };
 
 ModelChecker.prototype.extractStates = function(solution){
   const satisfyingPaths = [];
   function dfs(node, path){
-    if (node.terminal) {
-      if (node.value) satisfyingPaths.push(path);
+    if (!node.low) {
+      if (node.id) satisfyingPaths.push(path);
     } else {
       dfs(node.high, path.concat(node.variable));
       dfs(node.low, path.concat(`!${node.variable}`));
     }
   }
-  dfs(solution.root, []);
+  dfs(solution.getRoot(), []);
   return this.model.states.filter(function(state){
     return satisfyingPaths.some(function(path){
       return path.every(function(proposition){
@@ -281,4 +148,3 @@ parser.parse(process.argv[2], function(model){
   console.log('\nSatisfying states:');
   console.log(checker.solve().map(s => s.name));
 });
-
