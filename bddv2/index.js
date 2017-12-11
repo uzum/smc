@@ -188,11 +188,34 @@ BDD.prototype.apply = function(left, right, fn){
   }
 };
 
-BDD.prototype.restrict = function(value, variable){
+BDD.prototype.restrictWithFn = function(value, variable){
   return new BDD({
     fn: this.restrictF(this.fn, value, this.variables.indexOf(variable)),
     variables: this.variables.slice(1)
   });
+};
+
+BDD.prototype.restrict = function(value, variable){
+  const bdd = new BDD({
+    fn: this.restrictF(this.fn, value, this.variables.indexOf(variable)),
+    variables: this.variables.slice(1),
+    skipBuild: true
+  });
+  bdd._restrict(value, variable, this.getRoot());
+  return bdd;
+};
+
+BDD.prototype._restrict = function(value, variable, node){
+  if (!node.low) return this.getTerminalNode(node.id);
+  if (node.variable === variable) {
+    if (value) return this._restrict(value, variable, node.high);
+    return this._restrict(value, variable, node.low);
+  }
+  return this.insert(
+    node.index,
+    this._restrict(value, variable, node.low),
+    this._restrict(value, variable, node.high)
+  );
 };
 
 BDD.prototype.exists = function(variable){
