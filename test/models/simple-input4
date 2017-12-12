@@ -1,0 +1,19 @@
+MODULE main
+VAR
+state : {t1c2,t1t2,t1t3,n1n2,t1n2,c1n2,c1t2,n1t2,n1c2,c1c2} ;
+ASSIGN
+init(state) := n1n2;
+next(state) :=
+case
+(state=n1n2): {t1n2, n1t2};
+(state=t1n2): {c1n2,t1t2};
+(state=c1n2) : {n1n2,c1t2};
+(state=t1t2) : {c1t2};
+(state=c1t2) : n1t2;
+(state=n1t2) : {t1t3,n1c2};
+(state=n1c2) : {n1n2,t1c2};
+(state=t1t3) : {t1c2};
+(state=t1c2): t1n2;
+1 : state;
+esac;
+CTLSPEC E [ !n2 U !n2]

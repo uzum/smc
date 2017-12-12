@@ -1,0 +1,13 @@
+MODULE main
+VAR
+state : {r0, p0, q0} ;
+ASSIGN
+init(state) := r0;
+next(state) :=
+case
+(state=r0) : p0;
+(state=p0) : {p0, q0};
+(state=q0) : q0;
+1 : state;
+esac;
+CTLSPEC E [ p0 U q0 ]
